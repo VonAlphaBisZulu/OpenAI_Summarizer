@@ -1,0 +1,5 @@
+tkinter
+sounddevice
+soundfile
+openai
+pydub
