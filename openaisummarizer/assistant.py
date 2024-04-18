@@ -7,8 +7,14 @@ import soundfile as sf
 from openai import OpenAI
 import tempfile
 from time import sleep
-from pydub import AudioSegment
+from pydub import AudioSegment, playback
 from cryptography.fernet import Fernet
+import threading
+import tkinter as tk
+from queue import Queue, Empty
+
+# A queue to hold results from the background thread
+result_queue = Queue()
 
 key_file = 'openai_api.key'
 key_path = os.path.join(os.path.expanduser('~'), key_file)
@@ -16,6 +22,29 @@ key_file_enc = 'openai_api.enc'
 key_path_enc = os.path.join(os.path.expanduser('~'), key_file_enc)
 api_key_incorrect = ""
 and_get_response = ""
+
+def clean_up_files():
+    global temp_file, mp3_file
+    try:
+        temp_file.close()
+        mp3_file.close()
+        os.remove(temp_file.name)
+        os.remove(mp3_file.name)
+    except Exception as e:
+        print(f"Error deleting file: {e}")
+
+    result_queue.put(lambda: button_whisper.config(text='Start Recording', command=start_recording, state=tk.NORMAL))
+
+def process_queue():
+    try:
+        func = result_queue.get_nowait()
+    except Empty:
+        pass
+    else:
+        func()
+    finally:
+        # Schedule the next poll
+        root.after(100, process_queue)
 
 # Function to load or request API key
 def load_or_request_api_key():
@@ -83,15 +112,16 @@ def start_recording():
     global audio_data, stream, temp_file, file_writer
     temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
     audio_data = []
-    button_whisper.config(text='Stop Recording'+and_get_response, command=stop_recording)
-    
+    button_whisper.config(text='Stop Recording' + and_get_response, command=stop_recording)
+
     # Open stream for recording and a file writer to save the data
     file_writer = sf.SoundFile(temp_file.name, mode='w', samplerate=44100, channels=1, format='WAV')
     stream = sd.InputStream(samplerate=44100, channels=1, callback=audio_callback)
     stream.start()
+    return
 
 def stop_recording():
-    global stream, mp3_file, counter, user_cue, assistant_cue
+    global stream, mp3_file, counter, user_cue
     button_whisper.config(text='Processing ...', command=start_recording, state=tk.DISABLED)
     stream.stop()
     stream.close()
@@ -105,27 +135,18 @@ def stop_recording():
     # Transcription
     transcript = transcribe_audio()
     textfield_add(transcript)   # Insert new text
-    textfield_add(assistant_cue)
     # Summarization
-    if toggle.get():
-        summarize_text()
+    if toggle_combine.get():
+        async_summarize_text()
     # Cleanup
-    while True:
-        try:
-            temp_file.close()
-            mp3_file.close()
-            os.remove(temp_file.name)
-            os.remove(mp3_file.name)
-            break
-        except Exception as e:
-            print(f"Error deleting file: {e}")
-        sleep(0.1)
+    clean_up_files()
     button_whisper.config(text='Start Recording', command=start_recording, state=tk.NORMAL)
 
 def audio_callback(indata, frames, time, status):
     if status:
         print(status)
     file_writer.write(indata)  # Write data directly to file
+    return
     
 def transcribe_audio():
     with open(mp3_file.name, "rb") as audio_file:
@@ -153,26 +174,53 @@ def textfield_parse():
             formatted_data.append({"role": "assistant", "content": assistant_response})
     return formatted_data
 
+def async_summarize_text():
+    # Run summarization in a separate thread
+    threading.Thread(target=summarize_text).start()
+
 def summarize_text():
     global assistant_cue, user_cue, counter
+    textfield_add(assistant_cue)
     # Summarize the transcript using GPT-4 API
     completion = client.chat.completions.create(
         model="gpt-4-turbo",
         messages= init_message + textfield_parse()
     )
     textfield_add(f"{completion.choices[0].message.content}\n")
+    if toggle_playback.get():
+        async_playback_response(f"{completion.choices[0].message.content}")
     counter += 1
     textfield_add(f"\n== {counter} ==\n")
     textfield_add(user_cue)
-    return
+    result_queue.put(lambda: button_whisper.config(text='Start Recording', command=start_recording, state=tk.NORMAL))
+
+def async_playback_response(text):
+    # Run audio playback in a separate thread
+    threading.Thread(target=playback_response, args=(text,)).start()
+
+def playback_response(text):
+    try:
+        mp3_response = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="shimmer",
+            input=text
+        )
+        response.write_to_file(mp3_response.name)
+        audio_response = AudioSegment.from_mp3(mp3_response.name)
+        playback.play(audio_response)
+    finally:
+        mp3_response.close()
+        os.remove(mp3_response.name)
 
 def textfield_add(text):
     global text_field
     text_field.insert(tk.END, text)
+    return
 
-def toggled():
-    global button_gpt, toggle, and_get_response
-    if toggle.get():
+def combine_toggled():
+    global button_gpt, toggle_combine, and_get_response
+    if toggle_combine.get():
         button_gpt.configure(state=tk.DISABLED)
         and_get_response=" and generate response"
     else:
@@ -224,11 +272,16 @@ if __name__ == "__main__":
     button_gpt = tk.Button(root, text='Get response', command=summarize_text, state=tk.DISABLED)
     button_gpt.grid(row=1, column=1, sticky="ew")
 
-    toggle = tk.IntVar(value=1)
-    check_button = Checkbutton(root, text="Enable Feature", variable=toggle, command=toggled)
-    check_button.grid(row=2, column=1, sticky="e")  # Align to the right
+    toggle_playback = tk.IntVar(value=1)
+    check_button = Checkbutton(root, text="Audio Playback", variable=toggle_playback)
+    check_button.grid(row=2, column=1, sticky="e")
+
+    toggle_combine = tk.IntVar(value=1)
+    check_button = Checkbutton(root, text="Combine STT & ChatGPT", variable=toggle_combine, command=combine_toggled)
+    check_button.grid(row=2, column=1, sticky="w")
 
     label = Label(root, text="Toggle voice input and summarization:")
-    label.grid(row=2, column=0, sticky="e")  # Align to the left
+    label.grid(row=2, column=0, sticky="w")
 
+    root.after(100, process_queue)
     root.mainloop()
