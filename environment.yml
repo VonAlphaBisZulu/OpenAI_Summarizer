@@ -1,6 +1,7 @@
 name: openaisummarizer
 channels:
   - conda-forge
+  - anaconda
   - defaults
 dependencies:
   - conda-forge::python-sounddevice
@@ -8,4 +9,4 @@ dependencies:
   - conda-forge::pysoundfile
   - conda-forge::openai
   - conda-forge::pydub
-  - tk
+  - anaconda::tk
