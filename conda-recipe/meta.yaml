@@ -18,7 +18,7 @@ requirements:
   run:
     - conda-forge::python-sounddevice
     - conda-forge::ffmpeg
-    - forge::pysoundfile
+    - conda-forge::pysoundfile
     - conda-forge::openai
     - conda-forge::pydub
     - tk
