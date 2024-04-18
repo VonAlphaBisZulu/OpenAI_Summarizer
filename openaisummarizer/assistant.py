@@ -4,12 +4,44 @@ import sounddevice as sd
 import soundfile as sf
 from openai import OpenAI
 import tempfile
+import sys
 import os
 from time import sleep
 from pydub import AudioSegment
 
-# API_KEY = 'Your-API-Key-here'
-client = OpenAI(api_key=API_KEY)
+def read_api_key(file_path):
+    """ Attempt to read the API key from a file at the given path. """
+    try:
+        with open(file_path, 'r') as file:
+            api_key = file.read().strip()
+        return api_key
+    except FileNotFoundError:
+        return None
+
+# Check if a command-line argument was provided
+api_key = False
+if len(sys.argv) > 1:
+    file_path = sys.argv[1]
+    api_key = read_api_key(file_path)
+    if api_key:
+        print("API Key from command-line path:", api_key)
+if not api_key:
+    # If no argument provided or file not found, check the current working directory
+    file_path = os.path.join(os.getcwd(), 'OpenAI_API_key.txt')
+    api_key = read_api_key(file_path)
+    if api_key:
+        print("API Key from current working directory:", api_key)
+if not api_key:
+    # If file not found in the current working directory, check the directory of the executed script
+    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OpenAI_API_key.txt')
+    api_key = read_api_key(file_path)
+    if api_key:
+        print("API Key from script directory:", api_key)
+    else:
+        print("API Key could not be found.")
+
+client = OpenAI(api_key=api_key)
+
 message_history = [
     {"role": "system", "content": "You are an assistant who helps the user logging and documenting. "
                                     "Your task is to summarize a transcript of what the user has entered via a "
