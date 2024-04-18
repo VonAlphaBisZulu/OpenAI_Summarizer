@@ -3,17 +3,26 @@ name: Python Package using Conda
 on: [push]
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build_and_test:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
     strategy:
-      max-parallel: 5
-
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
+    - name: Set up Conda Environment with Micromamba (conda environment test)
+      if: matrix.package-manager == 'conda_env'
+      uses: mamba-org/setup-micromamba@v1
       with:
-        python-version: '3.10'
+        environment-file: environment.yml
+        create-args: >-
+          python=${{ matrix.python-version }}
+        post-cleanup: 'none'
     - name: Add conda to system path
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
