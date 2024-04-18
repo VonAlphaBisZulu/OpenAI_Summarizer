@@ -9,4 +9,6 @@ dependencies:
   - conda-forge::pysoundfile
   - conda-forge::openai
   - conda-forge::pydub
+  - conda-forge::portaudio
+  - conda-forge::cryptography
   - anaconda::tk

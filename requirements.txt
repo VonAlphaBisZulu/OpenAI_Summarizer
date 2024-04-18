@@ -1,5 +1,0 @@
-tk-tools
-sounddevice
-soundfile
-openai
-pydub
