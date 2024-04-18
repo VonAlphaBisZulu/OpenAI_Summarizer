@@ -12,3 +12,5 @@ dependencies:
   - conda-forge::portaudio
   - conda-forge::cryptography
   - anaconda::tk
+  - pip
+    - pyaudio
