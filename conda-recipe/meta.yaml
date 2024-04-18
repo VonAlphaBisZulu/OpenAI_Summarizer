@@ -1,0 +1,39 @@
+{% set version = '1.0' %}
+
+package:
+  name: openaisummarizer
+  version: {{ version }}
+
+source:
+  git_url: https://github.com/VonAlphaBisZulu/OpenAI_Summarizer
+  git_rev: v{{ version }}
+
+requirements:
+  build:
+    - setuptools
+    - flake8
+    - wheel
+    - pip
+    - python>=3.7
+  run:
+    - conda-forge::python-sounddevice
+    - conda-forge::ffmpeg
+    - forge::pysoundfile
+    - conda-forge::openai
+    - conda-forge::pydub
+    - tk
+
+build:
+  noarch: python
+  number: 0  # NOTE: increment for new build/set to zero for new version
+  script:
+    - python setup.py install --single-version-externally-managed --record record.txt
+
+about:
+  home:  https://github.com/VonAlphaBisZulu/OpenAI_Summarizer
+  license: General Public License v3.0
+  license_family: GNU
+  license_file: LICENSE
+  summary: Uses OpenAI API summarize voice recordings.
+  doc_url: https://github.com/VonAlphaBisZulu/OpenAI_Summarizer
+  dev_url: https://github.com/VonAlphaBisZulu/OpenAI_Summarizer
