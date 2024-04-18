@@ -1,0 +1,11 @@
+name: openaisummarizer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - conda-forge::python-sounddevice
+  - conda-forge::ffmpeg
+  - conda-forge::pysoundfile
+  - conda-forge::openai
+  - conda-forge::pydub
+  - tk
