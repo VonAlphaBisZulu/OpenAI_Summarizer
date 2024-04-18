@@ -22,6 +22,10 @@ jobs:
         create-args: >-
           python=${{ matrix.python-version }}
         post-cleanup: 'none'
+    - name: Activate Micromamba environment
+      if: matrix.package-manager == 'conda'
+      run: |
+        micromamba activate straindesign
     - name: Lint with flake8
       run: |
         micromamba install flake8
