@@ -233,7 +233,8 @@ def summarize_text():
     textfield_add(f"\n"+assistant_cue+f"\n")
     # Summarize the transcript using GPT-4 API
     completion = client.chat.completions.create(
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-3.5-turbo",
         messages= init_message + textfield_parse()
     )
     textfield_add(f"{completion.choices[0].message.content}\n")
