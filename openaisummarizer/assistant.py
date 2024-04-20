@@ -7,7 +7,7 @@ import sounddevice as sd
 import soundfile as sf
 from openai import OpenAI
 import tempfile
-from pydub import AudioSegment, playback
+from pydub import AudioSegment
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -19,25 +19,33 @@ from queue import Queue, Empty
 import pyaudio
 from pydub.utils import make_chunks
 
-# key_file = 'openai_api.key'
-# key_path = os.path.join(os.path.expanduser('~'), key_file)
-# key_file_enc = 'openai_api.enc'
-# key_path_enc = os.path.join(os.path.expanduser('~'), key_file_enc)
 api_key_incorrect = ""
 and_get_response = ""
 system_cue = f"---- System ----\n"
-user_cue = f"---- User Input Transcript ----\n"
-assistant_cue = f"\n---- Documentation Assistant ----\n"
+user_cue = f"---- User Input Transcript ----"
+assistant_cue = f"---- Documentation Assistant ----"
+
+# init_message = [
+#     {"role": "system", "content": "You are an assistant who helps the user logging and documenting. "
+#                                     "Your task is to summarize a transcript of what the user has entered via a "
+#                                     "speech-to-text interface. The goal is to digest the user input and create a "
+#                                     "text that is structured, understandable, complete and uses concise language. "
+#                                     "Keep the same narrative perspective as the transcript. It is possible that the "
+#                                     "input is split up into multiple overlapping segments so don't be surprised to "
+#                                     "see duplicated sentences. "}
+# ]
 
 init_message = [
-    {"role": "system", "content": "You are an assistant who helps the user logging and documenting. "
-                                    "Your task is to summarize a transcript of what the user has entered via a "
-                                    "speech-to-text interface. The goal is to digest the user input and create a "
-                                    "text that is structured, understandable, complete and uses concise language. "
-                                    "Keep the same narrative perspective as the transcript. It is possible that the "
-                                    "input is split up into multiple overlapping segments so don't be surprised to "
-                                    "see duplicated sentences. "}
+    {"role": "system", "content": "Du bist ein persönlicher Sekretär und hilfst dem Nutzer dabei Tagebuch zu schreiben. "
+                                  "Der Nutzer nimmt eine Texteingabe über Spracherkennung vor und du formulierst das Transkript "
+                                  "neu zu einen zusammenhängenden und gut verständlichen Text. Halte dieselbe Erzählperspetive ein, die der "
+                                  "Nutzer verwendet. Versuche außerdem den gleichen Tonfall wie der Nutzer zu treffen und vergleiche deine vorherigen "
+                                  "Zusammenfassungen mit der neuen Nutzereingabe um dieser Aufgabe gerecht zu werden. Formatiere den Text in Markdown. "
+                                  "Es kann sein, dass die Eingabe gestückelt eingeht und der Nutzer sich wiederholt. Vermeide bei deiner Zusammenfassung "
+                                  "jedoch sprachliche und Inhaltliche Wiederholungen soweit es geht. Es ist möglich, dass der Nutzer dich "
+                                  "direkt anspricht, um dir Fragen zu stellen oder Änderungen vorzunehmen."}
 ]
+
 counter = 1
 toggle_recording = False
 active_playback = False
@@ -123,7 +131,7 @@ def load_or_request_api_key():
             if api_key and check_API_key(api_key):
                 return api_key
             reply = messagebox.askyesnocancel("Invalid Password", "Invalid password. Would you like to retry (Yes) or enter a new OpenAI API Key (No)?")
-            if reply == messagebox.NO:
+            if reply is False:
                 os.remove(key_path)
             if reply is None:
                 exit_program()
@@ -197,18 +205,23 @@ def transcribe_audio():
 def textfield_parse():
     global text_field, user_cue, assistant_cue
     cur_text = text_field.get("1.0", tk.END)
-    sections = re.split(r'\n\n\=\= \d+ \=\=', cur_text)[0:]  # Skip the first split as it's empty
+    cur_text = re.sub(r'\n\=\= \d+ \=\=', '',cur_text)
+    pattern = r'(?=(?:'+assistant_cue+'|'+user_cue+'))'
+    pattern_cue = r'('+assistant_cue+'|'+user_cue+')'
+    segments = re.split(pattern,cur_text)
+    segments = [segment.strip() for segment in segments if segment.strip()]
     formatted_data = []
     # Process each section to extract the user input and assistant response
-    for section in sections:
-        split_section = section.split(user_cue)[1].split(assistant_cue)
-        # Append user part to the list as dictionary
-        user_input = split_section[0].strip()
-        formatted_data.append({"role": "user", "content": user_input})
-        # Append assistant part to the list as dictionary
-        if len(split_section) > 1 and len(split_section[1].strip()) > 1:
-            assistant_response = split_section[1].strip()
-            formatted_data.append({"role": "assistant", "content": assistant_response})
+    for segment in segments:
+        if user_cue in segment:
+            role = "user"
+        else:
+            role = "assistant"
+        text = re.sub(pattern_cue,'',segment).strip()
+        if text:
+            formatted_data.append({"role": role, "content": text})
+        # Filter out any empty strings that might be in the result
+        segments = [segment.strip() for segment in segments if segment.strip()]
     return formatted_data
 
 def async_summarize_text():
@@ -217,7 +230,7 @@ def async_summarize_text():
 
 def summarize_text():
     global assistant_cue, user_cue, counter
-    textfield_add(assistant_cue)
+    textfield_add(f"\n"+assistant_cue+f"\n")
     # Summarize the transcript using GPT-4 API
     completion = client.chat.completions.create(
         model="gpt-4-turbo",
@@ -228,7 +241,7 @@ def summarize_text():
         async_playback_response(f"{completion.choices[0].message.content}")
     counter += 1
     textfield_add(f"\n== {counter} ==\n")
-    textfield_add(user_cue)
+    textfield_add(user_cue+f"\n")
     result_queue.put(lambda: button_whisper.config(text='Start Recording', command=start_recording, state=tk.NORMAL))
 
 def async_playback_response(text):
@@ -316,11 +329,11 @@ def start_stop_playback(event=None):
 
 # Main logic
 if __name__ == "__main__":
+    global client
 
-    client = OpenAI(api_key = load_or_request_api_key())
-
-    # Initialize the main window
+    ## Initialize the main window
     root = tk.Tk()
+    root.withdraw()
     root.title("Summarizer")
 
     # Configure the grid for flexibility
@@ -333,7 +346,7 @@ if __name__ == "__main__":
     text_field = scrolledtext.ScrolledText(root, wrap=tk.WORD, font=("Consolas", 11), state=tk.NORMAL)
     text_field.grid(row=0, column=0, columnspan=2, sticky="nsew")  # Stick to all sides of the grid cell
     textfield_add(f"\n== {counter} ==\n")
-    textfield_add(user_cue)
+    textfield_add(user_cue+"\n")
     text_field.bind('<Control-Return>', lambda *args: None)
     text_field.bind('<Control-m>', lambda *args: None)
 
@@ -362,7 +375,12 @@ if __name__ == "__main__":
     root.bind('<Control-space>', on_ctrl_space)
     root.bind('<Control-Return>', on_ctrl_enter)
     root.bind('<Control-m>', start_stop_playback)
+    
+    ## Initialize OpenAI
+    client = OpenAI(api_key = load_or_request_api_key())
 
+    ## Run window loop
+    root.deiconify()
     root.after(100, process_queue)
     root.mainloop()
     
